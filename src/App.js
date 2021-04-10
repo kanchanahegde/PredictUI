@@ -8,7 +8,26 @@ import awsconfig from './aws-exports';
 
 import mic from 'microphone-stream';
 
-Amplify.configure(awsconfig);
+Amplify.configure({
+  "aws_project_region": "us-east-1",
+    "aws_cognito_identity_pool_id": "us-east-1:7c520420-a043-4835-9e28-b602ebe8fae3",
+    "aws_cognito_region": "us-east-1",
+    "aws_user_pools_id": "us-east-1_K7RirN5w3",
+    "aws_user_pools_web_client_id": "3msid5aii51fb47b8si1o32hj1",
+    "oauth": {},
+    "predictions": {
+        "convert": {
+            "translateText": {
+                "region": "us-east-1",
+                "proxy": false,
+                "defaults": {
+                    "sourceLanguage": "en",
+                    "targetLanguage": "es"
+                }
+            }
+        }
+    }
+});
 Amplify.addPluggable(new AmazonAIPredictionsProvider());
 
 function TextIdentification() {
