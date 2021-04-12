@@ -4,7 +4,7 @@ import './App.css';
 import Amplify, { Storage, Predictions } from 'aws-amplify';
 import { AmazonAIPredictionsProvider } from '@aws-amplify/predictions';
 
-import awsconfig from './aws-exports';
+//import awsconfig from './aws-exports';
 
 import mic from 'microphone-stream';
 
@@ -23,6 +23,23 @@ Amplify.configure({
                 "defaults": {
                     "sourceLanguage": "en",
                     "targetLanguage": "es"
+                }
+            },
+            "speechGenerator": {
+                "region": "us-east-1",
+                "proxy": false,
+                "defaults": {
+                    "VoiceId": "Penelope",
+                    "LanguageCode": "es-US"
+                }
+            }
+        },
+        "interpret": {
+            "interpretText": {
+                "region": "us-east-1",
+                "proxy": false,
+                "defaults": {
+                    "type": "SENTIMENT"
                 }
             }
         }
@@ -344,7 +361,8 @@ function TextToSpeech() {
 }
 
 function TextTranslation() {
-  const [response, setResponse] = useState("Input some text and click enter to test")
+  const [response, setResponse] = useState(" ")
+  const [responseAr, setResponseAr] = useState(" ")
   const [textToTranslate, setTextToTranslate] = useState("write to translate");
 
   function translate() {
@@ -359,6 +377,19 @@ function TextTranslation() {
       }
     }).then(result => setResponse(JSON.stringify(result, null, 2)))
       .catch(err => setResponse(JSON.stringify(err, null, 2)))
+
+    Predictions.convert({
+        translateText: {
+          source: {
+            text: textToTranslate,
+            // language : "es" // defaults configured on aws-exports.js
+            // supported languages https://docs.aws.amazon.com/translate/latest/dg/how-it-works.html#how-it-works-language-codes
+          },
+           targetLanguage: "ar"
+        }
+      }).then(result => setResponseAr(JSON.stringify(result, null, 2)))
+        .catch(err => setResponseAr(JSON.stringify(err, null, 2)))
+    
   }
 
   function setText(event) {
@@ -372,6 +403,7 @@ function TextTranslation() {
         <input value={textToTranslate} onChange={setText}></input>
         <button onClick={translate}>Translate</button>
         <p>{response}</p>
+        <p>{responseAr}</p>
       </div>
     </div>
   );
@@ -389,7 +421,7 @@ function TextInterpretation() {
         },
         type: "ALL"
       }
-    }).then(result => setResponse(JSON.stringify(result, null, 2)))
+    }).then(result => setResponse(JSON.stringify(result.textInterpretation.sentiment.predominant, null, 2)))
       .catch(err => setResponse(JSON.stringify(err, null, 2)))
   }
 
