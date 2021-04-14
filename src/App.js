@@ -4,52 +4,17 @@ import './App.css';
 import Amplify, { Storage, Predictions } from 'aws-amplify';
 import { AmazonAIPredictionsProvider } from '@aws-amplify/predictions';
 
-//import awsconfig from './aws-exports';
+import awsconfig from './aws-exports';
 
 import mic from 'microphone-stream';
 
-Amplify.configure({
-  "aws_project_region": "us-east-1",
-    "aws_cognito_identity_pool_id": "us-east-1:7c520420-a043-4835-9e28-b602ebe8fae3",
-    "aws_cognito_region": "us-east-1",
-    "aws_user_pools_id": "us-east-1_K7RirN5w3",
-    "aws_user_pools_web_client_id": "3msid5aii51fb47b8si1o32hj1",
-    "oauth": {},
-    "predictions": {
-        "convert": {
-            "translateText": {
-                "region": "us-east-1",
-                "proxy": false,
-                "defaults": {
-                    "sourceLanguage": "en",
-                    "targetLanguage": "es"
-                }
-            },
-            "speechGenerator": {
-                "region": "us-east-1",
-                "proxy": false,
-                "defaults": {
-                    "VoiceId": "Penelope",
-                    "LanguageCode": "es-US"
-                }
-            }
-        },
-        "interpret": {
-            "interpretText": {
-                "region": "us-east-1",
-                "proxy": false,
-                "defaults": {
-                    "type": "SENTIMENT"
-                }
-            }
-        }
-    }
-});
+Amplify.configure(awsconfig);
 Amplify.addPluggable(new AmazonAIPredictionsProvider());
 
 function TextIdentification() {
   const [response, setResponse] = useState("You can add a photo by uploading directly from the app ")
-
+  const [responsekv, setResponsekv] = useState(" ")
+  const [responsetab, setResponsetab] = useState(" ")
   function identifyFromFile(event) {
     setResponse('identifying text...');
     const { target: { files } } = event;
@@ -63,10 +28,23 @@ function TextIdentification() {
         source: {
           file,
         },
-        format: "PLAIN", // Available options "PLAIN", "FORM", "TABLE", "ALL"
+        format: "ALL", // Available options "PLAIN", "FORM", "TABLE", "ALL"
       }
-    }).then(({text: { fullText }}) => {
+    }).then(({text: { fullText,keyValues,tables : [
+      {
+          size: { rows, columns }, 
+          table // Matrix Array[ Array ] of size rows
+          // each element of the array contains { text, boundingBox, polygon, selected, rowSpan, columnSpan}
+      }
+  ]}}) => {
       setResponse(fullText)
+      var p = keyValues.map((kv)=>{
+        if(kv.value.selected)
+          return kv.key + " " 
+      })
+      var result = p.filter(word => word );
+       setResponsekv(result)
+       //setResponsetab(JSON.stringify(table,null,2))
     })
       .catch(err => setResponse(JSON.stringify(err, null, 2)))
   }
@@ -77,6 +55,8 @@ function TextIdentification() {
         <h3>Text identification</h3>
         <input type="file" onChange={identifyFromFile}></input>
         <p>{response}</p>
+        <p>{responsekv}</p>
+        <p>{responsetab}</p>
       </div>
     </div>
   );
@@ -191,7 +171,7 @@ function LabelsIdentification() {
         source: {
           file,
         },
-        type: "ALL" // "LABELS" will detect objects , "UNSAFE" will detect if content is not safe, "ALL" will do both default on aws-exports.js
+        type: "LABELS" // "LABELS" will detect objects , "UNSAFE" will detect if content is not safe, "ALL" will do both default on aws-exports.js
       }
     }).then(result => setResponse(JSON.stringify(result, null, 2)))
       .catch(err => setResponse(JSON.stringify(err, null, 2)))
@@ -363,9 +343,37 @@ function TextToSpeech() {
 function TextTranslation() {
   const [response, setResponse] = useState(" ")
   const [responseAr, setResponseAr] = useState(" ")
+  const [resLang, setresLang] = useState(" ")
+  const [resLangAr, setresLangAr] = useState(" ")
   const [textToTranslate, setTextToTranslate] = useState("write to translate");
+  const [speech, setspeech] = useState(false)
+
+  function generateTextToSpeech(param,voice) {
+    Predictions.convert({
+      textToSpeech: {
+        source: {
+          text: param,
+        },
+        voiceId: voice // default configured on aws-exports.js 
+        // list of different options are here https://docs.aws.amazon.com/polly/latest/dg/voicelist.html
+      }
+    }).then(result => {
+      let AudioContext = window.AudioContext || window.webkitAudioContext;
+      console.log({ AudioContext });
+      const audioCtx = new AudioContext(); 
+      const source = audioCtx.createBufferSource();
+      audioCtx.decodeAudioData(result.audioStream, (buffer) => {
+
+        source.buffer = buffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+      }, (err) => console.log({err}));
+    })
+      .catch(err => alert(err))
+  }
 
   function translate() {
+    
     Predictions.convert({
       translateText: {
         source: {
@@ -375,7 +383,7 @@ function TextTranslation() {
         },
         // targetLanguage: "en"
       }
-    }).then(result => setResponse(JSON.stringify(result, null, 2)))
+    }).then(result => {setResponse(JSON.stringify(result.text));setresLang(JSON.stringify(result.language));})
       .catch(err => setResponse(JSON.stringify(err, null, 2)))
 
     Predictions.convert({
@@ -387,9 +395,9 @@ function TextTranslation() {
           },
            targetLanguage: "ar"
         }
-      }).then(result => setResponseAr(JSON.stringify(result, null, 2)))
+      }).then(result => {setResponseAr(JSON.stringify(result.text));setresLangAr(JSON.stringify(result.language));}).then(res=>setspeech(true))
         .catch(err => setResponseAr(JSON.stringify(err, null, 2)))
-    
+      
   }
 
   function setText(event) {
@@ -402,8 +410,36 @@ function TextTranslation() {
         <h3>Text Translation</h3>
         <input value={textToTranslate} onChange={setText}></input>
         <button onClick={translate}>Translate</button>
-        <p>{response}</p>
-        <p>{responseAr}</p>
+        {speech && (
+        <div>
+        <br/>
+        Speech Generation
+        <h3>Text to Speech</h3>
+        <table style={{"margin":"auto"}}>
+        <tbody>
+        <tr>
+        <th>{`Text  `}</th>
+        <th>Language</th>
+        <th>Speech</th>
+        </tr>
+        <tr>
+        <td>{textToTranslate}</td>
+        <td>English(US)</td>
+        <td><button onClick={()=>generateTextToSpeech(textToTranslate,"Kendra")}>&#x25b6;</button></td>
+        </tr>
+        <tr>
+        <td>{response}</td>
+        <td>Spanish(US)</td>
+        <td><button onClick={()=>generateTextToSpeech(response,"Miguel")}>&#x25b6;</button></td>
+        </tr>
+        <tr>
+        <td>{responseAr}</td>
+        <td>Arabic</td>
+        <td><button onClick={()=>generateTextToSpeech(responseAr,"Zeina")}>&#x25b6;</button></td>
+        </tr>
+        </tbody>
+        </table>
+        </div>)}
       </div>
     </div>
   );
@@ -447,26 +483,15 @@ function App() {
       Translate Text
       <TextTranslation />
       <br/>
-      Speech Generation
-      <TextToSpeech />
-      <br/>
-      Transcribe Audio
-      <SpeechToText />
-      <br/>
       Identify Text
       <TextIdentification />
       <br/>
-      Identify Entities
-      <EntityIdentification />
-      <br/>
-      Identify Entities (Advanced)
-      <PredictionsUpload />
+      Text Interpretation
+      <TextInterpretation />
       <br/>
       Label Objects
       <LabelsIdentification />
-      <br/>
-      Text Interpretation
-      <TextInterpretation />
+
     </div>
   );
 }
